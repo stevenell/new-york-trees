@@ -3,11 +3,6 @@ import numpy as np
 from dash import html, dcc, Dash
 from dash.dependencies import Input, Output
 import plotly.express as px
-import pandas as pd
-
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', 500)
-
 
 url = ('https://data.cityofnewyork.us/resource/nwxe-4ae8.json?' +\
         '$select=spc_common,boroname,health,steward,count(tree_id)' +\
@@ -43,6 +38,9 @@ data.species = data.species.map({v: k for k, v in species.items()}).astype('int'
 steward = {0:'None', 1:'1 or 2', 2:'3 or 4', 3:'More than 4'}
 
 app = Dash(__name__)
+server = app.server
+
+
 app.layout = html.Div([
     html.H1("Health by Borough"),
     html.Label('Select Bureau'),
