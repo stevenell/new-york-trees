@@ -171,13 +171,14 @@ def tab_1_graph(b,s,p,c):
         temp_df = df[['species','count']].groupby('species').sum().reset_index()
         prop_map = {int(x['species']):x['count'] for i,x in temp_df.iterrows()}
         df['count'] = df.apply(lambda x:  x['count']/prop_map[x['species']], axis=1)
-        df['species'] = df.species.map(species)
         count_label = 'Proportion of Trees'
     else:
         count_label = 'Count of Trees'
         
     temp_df=None
     
+    df['species'] = df.species.map(species)
+
     df.sort_values('health',inplace=True,ascending=False)
     df.health=df.health.map(health)
     
