@@ -37,19 +37,19 @@ data.species = data.species.map({v: k for k, v in species.items()}).astype('int'
 # going to give the stewards better labels. Assuming they mean MORE THAN 4 instead of 4 or more
 steward = {0:'None', 1:'1 or 2', 2:'3 or 4', 3:'More than 4'}
 
+#app = JupyterDash(__name__)
 app = Dash(__name__)
 server = app.server
 
-
-app.layout = html.Div([
+tab1 = html.Div([
     html.H1("Health by Borough"),
     html.Label('Select Bureau'),
 
     dcc.Dropdown(
         id='borough-dropdown', clearable=True,
-        value=0, options=[
+        value=None, options=[
             {'label': v, 'value': k}
-            for k, v in borough.items()
+            for k,v in borough.items()
         ]
     ),
 
@@ -59,7 +59,7 @@ app.layout = html.Div([
         value='Count', options=[
             {'label': 'Alpha', 'value': 'Alpha'},
             {'label': 'Total Count of Species in Borough', 'value': 'Count'},
-            {'label': 'Average Health of Species Population', 'value': 'Health'}
+            {'label': 'Average Health of Species Population','value': 'Health'}
         ]),
 
     html.Label('Use Proportion within Species or Full Count?'),
@@ -71,87 +71,207 @@ app.layout = html.Div([
         ]),
     html.Label('Filter dataset by minimum number of Trees'),
     dcc.Slider(min=0, max=100, step=25,
-               value=0,
-               id='count-filter'
-               ),
-    html.Div(id='graph-output')
+           value=0,
+           id='count-filter'
+    ),
+    dcc.Graph(id = 'graph-output-1')
 ])
+
+tab2 = html.Div([
+    html.H1("Value of Stewards"),
+    html.Label('Select Bureau'),
+    
+    dcc.Dropdown(
+        id='borough-dropdown', clearable=True,
+        value=None, options=[
+            {'label': v, 'value': k}
+            for k,v in borough.items()
+        ]
+    ),
+
+    html.Label('Select Species'),
+    
+    dcc.Dropdown(
+        id='species-dropdown', clearable=True,
+        value=None, options=[
+            {'label': v, 'value': k}
+            for k,v in species.items()
+        ]
+    ),
+
+    dcc.Graph(id = 'graph-output-2')
+])    
+
+app.layout = html.Div([
+    dcc.Tabs(id="tabs-example", value='tab-1', children=[
+        dcc.Tab(id="tab-1", label='Health of Trees by Borough', value='tab-1'),
+        dcc.Tab(id="tab-2", label='Stewardship of Species', value='tab-2'),
+    ]),
+    html.Div(id='tabs-content-example',
+             children = tab1)
+])
+
+@app.callback(Output('tabs-content-example', 'children'),
+             [Input('tabs-example', 'value')])
+def render_content(tab):
+    print(tab)
+    if tab == 'tab-1':
+        return tab1
+    elif tab == 'tab-2':
+        return tab2
 
 
 @app.callback(
-    Output('graph-output', 'figure'),
-
+    Output('graph-output-1', 'figure'),
     [
-        Input('borough-dropdown', 'value'),
-        Input('sort-dropdown', 'value'),
-        Input('prop-dropdown', 'value'),
-        Input('count-filter', 'value')
-    ]
+    Input('borough-dropdown', 'value'),
+    Input('sort-dropdown', 'value'),
+    Input('prop-dropdown', 'value'),
+    Input('count-filter', 'value')
+         ]
 )
-def doesnt_matter(b, s, p, c):
-    # filter by borough
-    df = data.loc[data.borough == b, ['species', 'health', 'count']].groupby(['species', 'health']).sum().reset_index()
 
-    # Get full counts for hover text:
-    temp_df = df[['species', 'count']].groupby('species').sum().reset_index()
-    sort_map = {int(x['species']): x['count'] for i, x in temp_df.iterrows()}
+
+def tab_1_graph(b,s,p,c):
+    print(b,s,p,c)
+    
+    if b is None:
+        df = data[['species','health','count']].groupby(['species','health']).sum().reset_index()
+    else:
+        df = data.loc[data.borough==b,['species','health','count']].groupby(['species','health']).sum().reset_index()
+    
+    #Get full counts for hover text:
+    temp_df = df[['species','count']].groupby('species').sum().reset_index()
+    sort_map = {int(x['species']):x['count'] for i,x in temp_df.iterrows()}
     df['Full Count'] = df['species'].map(sort_map)
+    
+    
+    #Filter by count
+    temp_df = df[['species','count']].groupby('species').sum().reset_index()
+    df= df.loc[df['species'].isin(list(temp_df.loc[temp_df['count']>=c,'species'])),:]
 
-    # Filter by count
-    temp_df = df[['species', 'count']].groupby('species').sum().reset_index()
-    df = df.loc[df['species'].isin(list(temp_df.loc[temp_df['count'] >= c, 'species'])), :]
-
-    # sort
-    if s == 'Alpha':
-        spec_sort = [v for k, v in species.items()]
-    elif s == 'Health':
+    
+    #sort
+    if s=='Alpha':
+        spec_sort = [v for k,v in species.items()]
+    elif s=='Health':
         temp_df = df.groupby('species').apply(lambda x: np.average(x.health, weights=x['count'])).reset_index()
-        temp_df.columns = ['species', 'avg_health']
-        # sort_map = {int(x['species']):x['avg_health'] for i,x in temp_df.iterrows()}
-        # df['sort_value'] = df['species'].map(sort_map)
-        spec_sort = temp_df.sort_values('avg_health', ascending=True).species.unique()
+        temp_df.columns = ['species','avg_health']
+        #sort_map = {int(x['species']):x['avg_health'] for i,x in temp_df.iterrows()}
+        #df['sort_value'] = df['species'].map(sort_map)
+        spec_sort = temp_df.sort_values('avg_health',ascending=True).species.unique()
         spec_sort = [species[x] for x in spec_sort]
     else:
 
-        spec_sort = df.sort_values('Full Count', ascending=True).species.unique()
+        spec_sort = df.sort_values('Full Count',ascending=True).species.unique()    
         spec_sort = [species[x] for x in spec_sort]
 
     # Totals or Proportions
-    if p == 'Proportion':
-        temp_df = df[['species', 'count']].groupby('species').sum().reset_index()
-        prop_map = {int(x['species']): x['count'] for i, x in temp_df.iterrows()}
-        df['count'] = df.apply(lambda x: x['count'] / prop_map[x['species']], axis=1)
+    if p =='Proportion':
+        temp_df = df[['species','count']].groupby('species').sum().reset_index()
+        prop_map = {int(x['species']):x['count'] for i,x in temp_df.iterrows()}
+        df['count'] = df.apply(lambda x:  x['count']/prop_map[x['species']], axis=1)
         df['species'] = df.species.map(species)
         count_label = 'Proportion of Trees'
     else:
         count_label = 'Count of Trees'
+        
+    temp_df=None
+    
+    df.sort_values('health',inplace=True,ascending=False)
+    df.health=df.health.map(health)
+    
+    df = df.rename(columns={'count': count_label, 'species': "Species",'health': 'Health Rating'})
 
-    temp_df = None
-
-    df.sort_values('health', inplace=True, ascending=False)
-    df.health = df.health.map(health)
-
-    df = df.rename(columns={'count': count_label, 'species': "Species", 'health': 'Health Rating'})
-
+    
     fig = px.bar(df, y="Species"
                  , x=count_label
                  , color="Health Rating"
                  , barmode="stack"
                  , color_discrete_map={'Good': 'rgb(58,183,129)', 'Fair': 'rgb(200,170,60)', 'Poor': 'rgb(120,40,40)'}
-                 , hover_name='Species'
-                 , hover_data={count_label: ':.2f',
-                               'Health Rating': False,
-                               'Full Count': True,
-                               'Species': False,
-                               }
-                 )
+                 ,hover_name='Species'
+                 ,hover_data={count_label:':.2f',
+                              'Health Rating':False,
+                              'Full Count':True,
+                              'Species':False, 
+                             }
+                )
 
-    fig.update_layout(yaxis={"dtick": 1, 'categoryorder': 'array', 'categoryarray': spec_sort}
-                      , margin={"t": 0, "b": 0}
-                      , height=3000
+
+    fig.update_layout(yaxis={"dtick":1,'categoryorder':'array','categoryarray':spec_sort}
+                      ,margin={"t":0,"b":0}
+                      ,height=3000
                       )
     return fig
 
+@app.callback(
+    Output('graph-output-2', 'figure'),
+    [
+    Input('borough-dropdown', 'value'),
+    Input('species-dropdown', 'value')
+         ]
+)
+
+
+def tab_2_graph(b,s):
+    print(b,s)
+    if b is not None:
+        if s is not None:
+            df = data.loc[(data.borough==b) & (data.species==s),['steward','health','count']].groupby(['steward','health']).sum().reset_index()
+        else:
+            df = data.loc[(data.borough==b),['steward','health','count']].groupby(['steward','health']).sum().reset_index()
+    else:
+        if s is not None:
+            df = data.loc[(data.species==s),['steward','health','count']].groupby(['steward','health']).sum().reset_index()
+        else:
+            df = data[['steward','health','count']].groupby(['steward','health']).sum().reset_index()
+        
+    
+    spec_sort = [v for k,v in steward.items()]
+    
+    #Get full counts for hover text:
+    temp_df = df[['steward','count']].groupby('steward').sum().reset_index()
+    sort_map = {int(x['steward']):x['count'] for i,x in temp_df.iterrows()}
+    df['Full Count'] = df['steward'].map(sort_map)
+    
+    
+    
+
+    temp_df = df[['steward','count']].groupby('steward').sum().reset_index()
+    prop_map = {int(x['steward']):x['count'] for i,x in temp_df.iterrows()}
+    df['count'] = df.apply(lambda x:  x['count']/prop_map[x['steward']], axis=1)
+    df['steward'] = df.steward.map(steward)
+    count_label = 'Proportion of Trees'
+
+    temp_df=None
+    
+    df.sort_values('health',inplace=True,ascending=False)
+    df.health=df.health.map(health)
+    
+            
+    df = df.rename(columns={'count': count_label, 'steward': "Number of Stewards",'health': 'Health Rating'})
+
+    
+    fig = px.bar(df, y="Number of Stewards"
+                 , x=count_label
+                 , color="Health Rating"
+                 , barmode="stack"
+                 , color_discrete_map={'Good': 'rgb(58,183,129)', 'Fair': 'rgb(200,170,60)', 'Poor': 'rgb(120,40,40)'}
+                 ,hover_name='Number of Stewards'
+                 ,hover_data={count_label:':.2f',
+                              'Health Rating':False,
+                              'Full Count':True,
+                              'Number of Stewards':False, 
+                             }
+                )
+
+
+    fig.update_layout(yaxis={"dtick":1,'categoryorder':'array','categoryarray':spec_sort}
+                      ,margin={"t":0,"b":0}
+                      ,height=200
+                      )
+    return fig
+#app.run_server(mode='inline')
 
 if __name__ == '__main__':
     app.run_server(debug=True)
